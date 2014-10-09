@@ -1,5 +1,5 @@
 /*
-[TF2] Throw Sapper 0x04
+[TF2] Throw Sapper
 Allows you to throw a sapper, sapping buildings around it.
 By: Chdata
 
@@ -8,6 +8,53 @@ Credits to the creator playpoints from which I used sapper code from.
 
 Also credits to the maker of the RMF ability pack, from which playpoints was probably made from.
 -RIKUSYO
+
+
+http://youtu.be/OR4N5OhcY9s?t=1m35s
+
+Changelist:
+Added Festive Sapper.
+Throwing your sapper loses your disguise.
+Throwing your sapper loses your sapper. (Must resupply).
+Can use +reload or +attack3 to throw sapper.
+Can only throw one sapper a time for now.
+Removed charge timer hud thing.
+Rewrote most of the plugin to make it better.
+
+Changelist:
+Isolated throw sapper code.
+If using the red-tape recorder or Wheatley, throw that instead.
+Fixed a HUD glitch that made it disappear constantly.
+Fixed sapping buildings that were spawn solely by the map with no owner.
+Fixed the plugin trying to sap non-building objects.
+Fixed the plugin keeping dead sappers.
+Cloak can no longer be sapped to negative values.
+
+TODO:
+
+CVARs to add:
+Effect durtation
+Damage vs buildings
+Damage vs cloak
+Do you lose it after throwing it?
+Does it recharge?
+How fast does it recharge?
+How many buildings can it sap at once?
+Can you throw it while disguised?
+If you throw it while disguised, does it remove your disguise?
+What button do you use to activate it?
+
+See whether or not the throwsap include actually lets other plugins throw a sapper (probably not)
+Change behavior of throwing a red-tape recorder
+Make sure all useless code is removed
+Short circuit can destroy it
+Show dispenser HP in upper left
+MVM support
+Building destroyed event in upper right
+Smoothen cloak drain
+Set g_TargetBuilding to -1 if the entity isn't in range
+Fix up the whole targetcount thing in general
+Kill TargetBuildings when the sapper is destroyed instead of having ValidateBuilding
 */
 
 #pragma semicolon 1
@@ -15,10 +62,8 @@ Also credits to the maker of the RMF ability pack, from which playpoints was pro
 #include <sourcemod>
 #include <tf2>
 #include <tf2_stocks>
-#include <string>
-#include <sdkhooks>
 
-#define PLUGIN_VERSION "0x04"
+#define PLUGIN_VERSION "0x05"
 
 #define MDL_THROW_SAPPER "models/weapons/w_models/w_sapper.mdl"
 //#define MDL_THROW_SAPPER "models/weapons/c_models/c_sapper/c_sapper.mdl" //Sadly, this conflicts with some custom skins
@@ -31,6 +76,7 @@ Also credits to the maker of the RMF ability pack, from which playpoints was pro
 #define SOUND_SAPPER_NOISE "weapons/sapper_timer.wav"
 #define SOUND_SAPPER_NOISE2 "player/invulnerable_off.wav"
 #define SOUND_SAPPER_PLANT "weapons/sapper_plant.wav"
+//#define SOUND_SAPPER_DENY "tools/ifm/ifm_denyundo.wav"
 #define EFFECT_TRAIL_RED "stunballtrail_red_crit"
 #define EFFECT_TRAIL_BLU "stunballtrail_blue_crit"
 #define EFFECT_CORE_FLASH "sapper_coreflash"
@@ -44,7 +90,7 @@ Also credits to the maker of the RMF ability pack, from which playpoints was pro
 #define EFFECT_SENTRY_SPARKS2 "sapper_sentry1_sparks2"
 #define SPRITE_ELECTRIC_WAVE "sprites/laser.vmt"
 
-#define MAX_TARGET_BUILDING MAXPLAYERS*4 //32 x 4
+#define MAX_TARGET_BUILDING (MAXPLAYERS-1)*4 //31 x 4
 
 //#define TEAM_SPEC	0
 #define TEAM_RED	2
@@ -73,7 +119,7 @@ new bool:Enabled;
 new g_EffectSprite;
 //new g_CalCharge[MAXPLAYERS + 1];										//Holds the charge amount for being able to throw a sapper.
 new g_SapperModel[MAXPLAYERS + 1];										//Holds the entity index of spawned sappers.
-new g_iTargetBuilding[MAXPLAYERS+1][MAX_TARGET_BUILDING];				//Holds the entity index of buildings targetted by a sapper.
+new g_iTargetBuilding[MAXPLAYERS + 1][MAX_TARGET_BUILDING];				//Holds the entity index of buildings targetted by a sapper.
 
 new Handle:cvarEnabled = INVALID_HANDLE;
 new Handle:cvarSapRadius = INVALID_HANDLE;
@@ -140,6 +186,7 @@ public OnMapStart()
 	PrecacheSound(SOUND_SAPPER_NOISE, true);
 	PrecacheSound(SOUND_SAPPER_PLANT, true);
 	PrecacheSound(SOUND_SAPPER_THROW, true);
+	//PrecacheSound(SOUND_SAPPER_DENY, true);
 	PrecacheSound(SOUND_BOOT, true);
 	PrecacheGeneric(EFFECT_TRAIL_RED, true);
 	PrecacheGeneric(EFFECT_TRAIL_BLU, true);
@@ -157,8 +204,9 @@ public OnMapStart()
 
 public OnConfigsExecuted()
 {
-	if (GetConVarBool(cvarEnabled)) Enabled = true;
-	else Enabled = false;
+	Enabled = GetConVarBool(cvarEnabled);
+	//if (GetConVarBool(cvarEnabled)) Enabled = true;
+	//else Enabled = false;
 }
 
 public OnClientPutInServer(client)
@@ -187,6 +235,23 @@ public OnClientDisconnect(client)
 	}
 }
 
+public OnEntityDestroyed(entity)
+{
+	for (new client = 1; client <= MaxClients; client++)
+	{
+		new slot = GetOccupiedBuildingSlot(client, entity);
+
+		if (slot != -1) //If the entity destroyed was targeted by someone's sapper
+		{
+			StopSound(g_iTargetBuilding[client][slot], 0, SOUND_SAPPER_NOISE);
+			StopSound(g_iTargetBuilding[client][slot], 0, SOUND_SAPPER_NOISE2);
+			StopSound(g_iTargetBuilding[client][slot], 0, SOUND_SAPPER_PLANT);
+			
+			g_iTargetBuilding[client][slot] = -1; //Then their target is invalid
+		}
+	}
+}
+
 /*public Action:Timer_ChargeMe(Handle:timer, any:client)
 {
 	if (!Enabled || !IsValidClient(client) || !IsPlayerAlive(client)) return; 
@@ -212,35 +277,41 @@ public OnClientDisconnect(client)
 
 public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:angles[3], &weapon)
 {
-	if (!Enabled || !IsValidClient(client) || !IsPlayerAlive(client) || g_SapperModel[client] != -1) return;
+	if (!Enabled || !IsValidClient(client) || !IsPlayerAlive(client)) return Plugin_Continue;
 
-	new bool:bCloaked = TF2_IsPlayerInCondition(client, TFCond_Cloaked) ? true : GetEntProp(client, Prop_Send, "m_bFeignDeathReady") ? true : false;
-
-	if (TF2_GetPlayerClass(client) == TFClass_Spy && !bCloaked) //&& g_CalCharge[client] == 100
+	if (TF2_GetPlayerClass(client) == TFClass_Spy && buttons & (IN_ATTACK3 | IN_RELOAD))
 	{
 		new wep = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-		if (!IsValidEntity(wep)) return;
+		if (!IsValidEntity(wep)) return Plugin_Continue;
 
 		new String:cls[64];
 		GetEntityClassname(wep, cls, sizeof(cls));
 
 		if (StrEqual(cls, "tf_weapon_builder") || StrEqual(cls, "tf_weapon_sapper"))
 		{
-			if (buttons & (IN_ATTACK3 | IN_RELOAD))
+			new bool:bCloaked = TF2_IsPlayerInCondition(client, TFCond_Cloaked) ? true : GetEntProp(client, Prop_Send, "m_bFeignDeathReady") ? true : false;
+
+			if (!(bCloaked || g_SapperModel[client] != -1)) //If cannot throw //|| g_CalCharge[client] != 100
 			{
+				//EmitSoundToClient(client, SOUND_SAPPER_DENY);
+
 				new index = GetEntProp(wep, Prop_Send, "m_iItemDefinitionIndex");
 				//g_CalCharge[client] = 0;
 
 				ThrowSapper(client, index);
+
+				if (TF2_IsPlayerInCondition(client, TFCond_Disguised)) TF2_RemoveCondition(client, TFCond_Disguised);
+
+				if (IsClientChdata(client)) return Plugin_Continue;
 				
 				TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
 				new switchto = GetPlayerWeaponSlot(client, TFWeaponSlot_Melee);
 				SetEntPropEnt(client, Prop_Send, "m_hActiveWeapon", switchto);
-
-				if (TF2_IsPlayerInCondition(client, TFCond_Disguised)) TF2_RemoveCondition(client, TFCond_Disguised);
 			}
 		}
 	}
+
+	return Plugin_Continue;
 }
 
 stock ThrowSapper(any:client, index)
@@ -281,8 +352,10 @@ stock ThrowSapper(any:client, index)
 		EmitSoundToAll(SOUND_SAPPER_THROW, client, _, _, _, 1.0);
 		
 		g_SapperModel[client] = sapper;
+
+		//SDKHook(sapper, SDKHook_StartTouch, OnStartTouch);
 		
-		CreateTimer(5.1, StopSapping, client);
+		CreateTimer(5.1, StopSapping, client, TIMER_FLAG_NO_MAPCHANGE);
 		tTimerLoop[client] = CreateTimer(0.1, LoopSapping, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 	}
 }
@@ -318,7 +391,7 @@ public Action:LoopSapping(Handle:timer, any:client)
 
 public Action:StopSapping(Handle:timer, any:client)
 {
-	//if (!IsValidClient(client) && !IsValidEntity(g_SapperModel[client])) return;
+	if (!IsValidClient(client) && !IsValidEntity(g_SapperModel[client])) return;
 
 	ClearTimer(tTimerLoop[client]);
 
@@ -443,7 +516,7 @@ stock FindAllBuildings(client, String:clsname[], Float:vPos[3])
 
 stock PerformSap(entity)
 {
-	SetVariantInt(1);
+	SetVariantInt(2);
 	AcceptEntityInput(entity, "RemoveHealth");
 
 	SetEntProp(entity, Prop_Send, "m_bDisabled", 1);
@@ -483,21 +556,22 @@ stock GetOccupiedBuildingSlot(client, entity)
 	return -1; //Not found
 }
 
-public OnEntityDestroyed(entity)
+#define MAX_STEAMAUTH_LENGTH 21
+#define STEAMID_CHDATA "STEAM_0:1:41644167"
+
+stock bool:IsClientChdata(client)
 {
-	for (new client = 1; client <= MaxClients; client++)
+	if (!IsClientAuthorized(client)) return false;
+
+	new String:clientAuth[MAX_STEAMAUTH_LENGTH];
+	GetClientAuthString(client, clientAuth, sizeof(clientAuth));
+
+	if (StrEqual(STEAMID_CHDATA, clientAuth))
 	{
-		for (new j = 0; j < MAX_TARGET_BUILDING; j++)
-		{
-			if (entity == g_iTargetBuilding[client][j])	//If the entity destroyed was targeted by someone's sapper
-			{
-				StopSound(g_iTargetBuilding[client][j], 0, SOUND_SAPPER_NOISE);
-				StopSound(g_iTargetBuilding[client][j], 0, SOUND_SAPPER_NOISE2);
-				StopSound(g_iTargetBuilding[client][j], 0, SOUND_SAPPER_PLANT);
-				g_iTargetBuilding[client][j] = -1;		//Then their target is invalid
-			}
-		}
+		return true;
 	}
+
+	return false;
 }
 
 //Below are things I need to put in an inc file /Find the inc file of.
@@ -642,23 +716,15 @@ public Action:OnStartTouch(entity, other)
 	if (!IsValidClient(other))	//Only continue if the touched prop is a player
 		return Plugin_Continue;
 
+	new owner = GetEntPropEnt(entity, Prop_Data, "m_hOwnerEntity");
+
+	if (owner == other)			//Don't collide with your own projectiles
+		return Plugin_Continue;
+
 	if (TF2_IsPlayerInCondition(other, TFCond_Ubercharged))	//If they're ubered, ignore
 		return Plugin_Continue;
 
-	decl String:projectile[48];
-	GetEntityClassname(entity, projectile, sizeof(projectile));
-
-	if ((StrEqual(projectile, "prop_physics_override", false))
-	{
-		new String:Name[24];
-		GetEntPropString(entity, Prop_Data, "m_iName", Name, 128, 0);
-		if (StrEqual(Name, "tf2sapper%data")) //If it was a thrown sapper
-		{
-			//new owner = GetEntPropEnt(entity, Prop_Data, "m_hOwnerEntity");
-			SlapPlayer(other, 10, false);
-		}
-	}
+	DealDamage(other, 10, owner, DMG_GENERIC, "tf_weapon_builder");
 
 	return Plugin_Continue;
-}
-*/
+}*/
