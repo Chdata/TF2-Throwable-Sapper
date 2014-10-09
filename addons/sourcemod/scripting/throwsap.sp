@@ -9,52 +9,6 @@ Credits to the creator playpoints from which I used sapper code from.
 Also credits to the maker of the RMF ability pack, from which playpoints was probably made from.
 -RIKUSYO
 
-
-http://youtu.be/OR4N5OhcY9s?t=1m35s
-
-Changelist:
-Added Festive Sapper.
-Throwing your sapper loses your disguise.
-Throwing your sapper loses your sapper. (Must resupply).
-Can use +reload or +attack3 to throw sapper.
-Can only throw one sapper a time for now.
-Removed charge timer hud thing.
-Rewrote most of the plugin to make it better.
-
-Changelist:
-Isolated throw sapper code.
-If using the red-tape recorder or Wheatley, throw that instead.
-Fixed a HUD glitch that made it disappear constantly.
-Fixed sapping buildings that were spawn solely by the map with no owner.
-Fixed the plugin trying to sap non-building objects.
-Fixed the plugin keeping dead sappers.
-Cloak can no longer be sapped to negative values.
-
-TODO:
-
-CVARs to add:
-Effect durtation
-Damage vs buildings
-Damage vs cloak
-Do you lose it after throwing it?
-Does it recharge?
-How fast does it recharge?
-How many buildings can it sap at once?
-Can you throw it while disguised?
-If you throw it while disguised, does it remove your disguise?
-What button do you use to activate it?
-
-See whether or not the throwsap include actually lets other plugins throw a sapper (probably not)
-Change behavior of throwing a red-tape recorder
-Make sure all useless code is removed
-Short circuit can destroy it
-Show dispenser HP in upper left
-MVM support
-Building destroyed event in upper right
-Smoothen cloak drain
-Set g_TargetBuilding to -1 if the entity isn't in range
-Fix up the whole targetcount thing in general
-Kill TargetBuildings when the sapper is destroyed instead of having ValidateBuilding
 */
 
 #pragma semicolon 1
@@ -65,11 +19,12 @@ Kill TargetBuildings when the sapper is destroyed instead of having ValidateBuil
 
 #define PLUGIN_VERSION "0x05"
 
-#define MDL_THROW_SAPPER "models/weapons/w_models/w_sapper.mdl"
-//#define MDL_THROW_SAPPER "models/weapons/c_models/c_sapper/c_sapper.mdl" //Sadly, this conflicts with some custom skins
-#define MDL_THROW_RECORDER "models/weapons/w_models/w_sd_sapper.mdl"
-#define MDL_THROW_WHEATLEY "models/weapons/c_models/c_p2rec/c_p2rec.mdl"
-#define MDL_THROW_FESTIVE "models/weapons/c_models/c_sapper/c_sapper_xmas.mdl"
+//#define MDL_THROW_SAPPER "models/weapons/c_models/c_sapper/c_sapper.mdl" //Sadly, this conflicts with some custom skins or something
+#define MDL_SAPPER   "models/weapons/w_models/w_sapper.mdl"
+#define MDL_RECORDER "models/weapons/w_models/w_sd_sapper.mdl"
+#define MDL_WHEATLEY "models/weapons/c_models/c_p2rec/c_p2rec.mdl"
+#define MDL_FESTIVE  "models/weapons/c_models/c_sapper/c_sapper_xmas.mdl"
+#define MDL_BREAD    "models/weapons/c_models/c_breadmonster_sapper/c_breadmonster_sapper.mdl"
 #define SOUND_BOOT "weapons/weapon_crit_charged_on.wav"
 #define SOUND_SAPPER_REMOVED "weapons/sapper_removed.wav"
 #define SOUND_SAPPER_THROW "weapons/knife_swing.wav"
