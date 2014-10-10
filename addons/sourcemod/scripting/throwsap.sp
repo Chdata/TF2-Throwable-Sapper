@@ -19,33 +19,41 @@ Also credits to the maker of the RMF ability pack, from which playpoints was pro
 
 #define PLUGIN_VERSION "0x05"
 
-//#define MDL_THROW_SAPPER "models/weapons/c_models/c_sapper/c_sapper.mdl" //Sadly, this conflicts with some custom skins or something
-#define MDL_SAPPER   "models/weapons/w_models/w_sapper.mdl"
-#define MDL_RECORDER "models/weapons/w_models/w_sd_sapper.mdl"
-#define MDL_WHEATLEY "models/weapons/c_models/c_p2rec/c_p2rec.mdl"
-#define MDL_FESTIVE  "models/weapons/c_models/c_sapper/c_sapper_xmas.mdl"
-#define MDL_BREAD    "models/weapons/c_models/c_breadmonster_sapper/c_breadmonster_sapper.mdl"
-#define SOUND_BOOT "weapons/weapon_crit_charged_on.wav"
-#define SOUND_SAPPER_REMOVED "weapons/sapper_removed.wav"
-#define SOUND_SAPPER_THROW "weapons/knife_swing.wav"
-#define SOUND_SAPPER_NOISE "weapons/sapper_timer.wav"
-#define SOUND_SAPPER_NOISE2 "player/invulnerable_off.wav"
-#define SOUND_SAPPER_PLANT "weapons/sapper_plant.wav"
-//#define SOUND_SAPPER_DENY "tools/ifm/ifm_denyundo.wav"
-#define EFFECT_TRAIL_RED "stunballtrail_red_crit"
-#define EFFECT_TRAIL_BLU "stunballtrail_blue_crit"
-#define EFFECT_CORE_FLASH "sapper_coreflash"
-#define EFFECT_DEBRIS "sapper_debris"
-#define EFFECT_FLASH "sapper_flash"
-#define EFFECT_FLASHUP "sapper_flashup"
-#define EFFECT_FLYINGEMBERS "sapper_flyingembers"
-#define EFFECT_SMOKE "sapper_smoke"
-#define EFFECT_SENTRY_FX "sapper_sentry1_fx"
-#define EFFECT_SENTRY_SPARKS1 "sapper_sentry1_sparks1"
-#define EFFECT_SENTRY_SPARKS2 "sapper_sentry1_sparks2"
-#define SPRITE_ELECTRIC_WAVE "sprites/laser.vmt"
+#define TARGETNAME_THROWSAP       "tf2sapper%data"
+//#define MDL_SAPPER      "models/weapons/c_models/c_sapper/c_sapper.mdl" //Sadly, this conflicts with some custom skins or something
+#define MDL_SAPPER              "models/weapons/w_models/w_sapper.mdl"
+#define MDL_RECORDER            "models/weapons/w_models/w_sd_sapper.mdl"
+#define MDL_WHEATLEY            "models/weapons/c_models/c_p2rec/c_p2rec.mdl"
+#define MDL_FESTIVE             "models/weapons/c_models/c_sapper/c_sapper_xmas.mdl"
+#define MDL_BREAD               "models/weapons/c_models/c_breadmonster_sapper/c_breadmonster_sapper.mdl"
+#define SOUND_BOOT              "weapons/weapon_crit_charged_on.wav"
+#define SOUND_SAPPER_REMOVED    "weapons/sapper_removed.wav"
+#define SOUND_SAPPER_THROW      "weapons/knife_swing.wav"
+#define SOUND_SAPPER_NOISE      "weapons/sapper_timer.wav"
+#define SOUND_SAPPER_NOISE2     "player/invulnerable_off.wav"
+#define SOUND_SAPPER_PLANT      "weapons/sapper_plant.wav"
+//#define SOUND_SAPPER_DENY     "tools/ifm/ifm_denyundo.wav"
+#define EFFECT_TRAIL_RED        "stunballtrail_red_crit"
+#define EFFECT_TRAIL_BLU        "stunballtrail_blue_crit"
+#define EFFECT_CORE_FLASH       "sapper_coreflash"
+#define EFFECT_DEBRIS           "sapper_debris"
+#define EFFECT_FLASH            "sapper_flash"
+#define EFFECT_FLASHUP          "sapper_flashup"
+#define EFFECT_FLYINGEMBERS     "sapper_flyingembers"
+#define EFFECT_SMOKE            "sapper_smoke"
+#define EFFECT_SENTRY_FX        "sapper_sentry1_fx"
+#define EFFECT_SENTRY_SPARKS1   "sapper_sentry1_sparks1"
+#define EFFECT_SENTRY_SPARKS2   "sapper_sentry1_sparks2"
+#define SPRITE_ELECTRIC_WAVE    "sprites/laser.vmt"
 
-#define MAX_TARGET_BUILDING (MAXPLAYERS-1)*4 //31 x 4
+static const String:g_szBuildingClasses[][] = {
+    "obj_dispenser",
+    "obj_sentrygun",
+    "obj_teleporter"
+};
+
+//31 players x 4 buildings = 124
+#define MAX_TARGETABLE_BUILDINGS 124
 
 //#define TEAM_SPEC 0
 #define TEAM_RED    2
@@ -70,14 +78,21 @@ else Format(z, sizeof(z), "0%i", VoiceOffset);
 Format(s, PLATFORM_MAX_PATH, "vo/items/wheatley_sapper/wheatley_sapper_hacking%s.wav", z);
 */
 
-new bool:Enabled;
-new g_EffectSprite;
-//new g_CalCharge[MAXPLAYERS + 1];                                      //Holds the charge amount for being able to throw a sapper.
-new g_SapperModel[MAXPLAYERS + 1];                                      //Holds the entity index of spawned sappers.
-new g_iTargetBuilding[MAXPLAYERS + 1][MAX_TARGET_BUILDING];             //Holds the entity index of buildings targetted by a sapper.
+new bool:bEnabled;                                                      // Bool for the plugin being enabled or disabled.
+new g_hEffectSprite;                                                    // Handle for the lightning shockwave sprite.
 
-new Handle:cvarEnabled = INVALID_HANDLE;
-new Handle:cvarSapRadius = INVALID_HANDLE;
+static Handle:g_hSapperArray;                                           // Holds entrefs for spawned sappers.
+static Handle:g_hTargetedArray;                                         // Holds entrefs for buildings targeted by sappers.
+                                                                        // Both have 2 blocks. [owner userid][entref]
+
+// TODO: We need target array to track the player/sapper sapping them, not their owner
+
+//new g_CalCharge[MAXPLAYERS + 1];                                      // Holds the charge amount for being able to throw a sapper.
+//new g_SapperModel[MAXPLAYERS + 1];                                      // Holds the entity index of spawned sappers.
+//new g_iTargetBuilding[MAXPLAYERS + 1][MAX_TARGET_BUILDING];             // Holds the entity index of buildings targetted by a sapper.
+
+new Handle:g_cvEnabled = INVALID_HANDLE;
+new Handle:g_cvSapRadius = INVALID_HANDLE;
 
 //new Handle:tChargeTimer[MAXPLAYERS + 1] = INVALID_HANDLE;
 new Handle:tTimerLoop[MAXPLAYERS + 1] = INVALID_HANDLE;
@@ -85,7 +100,7 @@ new Handle:tTimerLoop[MAXPLAYERS + 1] = INVALID_HANDLE;
 
 public Plugin:myinfo =
 {
-    name = "[TF2] Throwsap",
+    name = "Spy's Throwable Sapper",
     description = "Throw your sapper!",
     author = "Chdata",
     version = PLUGIN_VERSION,
@@ -106,36 +121,38 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
 
 public OnPluginStart()
 {
-    CreateConVar("sm_throwsap_version", PLUGIN_VERSION, "Throwsap Version", FCVAR_REPLICATED | FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_DONTRECORD | FCVAR_NOTIFY);
-    cvarEnabled = CreateConVar("sm_throwsap_enabled", "1", "Enable/Disable throwsap plugin.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
-    cvarSapRadius = CreateConVar("sm_throwsap_sapradius", "300.0", "Radius of effect.");
+    CreateConVar("throwsap_version", PLUGIN_VERSION, "Throwsap Version", FCVAR_REPLICATED | FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_DONTRECORD | FCVAR_NOTIFY);
+    g_cvEnabled = CreateConVar("throwsap_enabled", "1", "Enable/Disable throwsap plugin.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
+    g_cvSapRadius = CreateConVar("throwsap_sapradius", "300.0", "Radius of effect.");
 
     AutoExecConfig(true, "plugin.throwsap");
 
     //hHudCharge = CreateHudSynchronizer();
+
+    g_hSapperArray = CreateArray(2);   // Each index has 2 blocks
+    g_hTargetedArray = CreateArray(2);
     
-    for (new client = 0; client <= MaxClients; client++)
+    for (new client = 1; client <= MaxClients; client++)
     {   
-        if (!IsValidClient(client)) continue;
-
-        //g_CalCharge[client] = 0;
-        //tChargeTimer[client] = CreateTimer(0.5, Timer_ChargeMe, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
-
-        g_SapperModel[client] = -1;
-        
-        for (new i = 0; i < MAX_TARGET_BUILDING; i++)
+        if (IsClientInGame(client))
         {
-            g_iTargetBuilding[client][i] = -1;
+            // TODO: Destroy all existing sappers here and remove building targets
+
+            //g_CalCharge[client] = 0;
+            //tChargeTimer[client] = CreateTimer(0.5, Timer_ChargeMe, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
         }
     }
 }
 
 public OnMapStart()
 {
-    PrecacheModel(MDL_THROW_SAPPER, true);
-    PrecacheModel(MDL_THROW_RECORDER, true);
-    PrecacheModel(MDL_THROW_WHEATLEY, true);
-    PrecacheModel(MDL_THROW_FESTIVE, true);
+    ClearArray(g_hSapperArray);
+    ClearArray(g_hTargetedArray);
+    PrecacheModel(MDL_SAPPER, true);
+    PrecacheModel(MDL_RECORDER, true);
+    PrecacheModel(MDL_WHEATLEY, true);
+    PrecacheModel(MDL_FESTIVE, true);
+    PrecacheModel(MDL_BREAD, true);
     PrecacheSound(SOUND_SAPPER_REMOVED, true);
     PrecacheSound(SOUND_SAPPER_NOISE2, true);
     PrecacheSound(SOUND_SAPPER_NOISE, true);
@@ -154,27 +171,18 @@ public OnMapStart()
     PrecacheGeneric(EFFECT_SENTRY_FX, true);
     PrecacheGeneric(EFFECT_SENTRY_SPARKS1, true);
     PrecacheGeneric(EFFECT_SENTRY_SPARKS2, true);
-    g_EffectSprite = PrecacheModel(SPRITE_ELECTRIC_WAVE, true);
+    g_hEffectSprite = PrecacheModel(SPRITE_ELECTRIC_WAVE, true);
 }
 
 public OnConfigsExecuted()
 {
-    Enabled = GetConVarBool(cvarEnabled);
-    //if (GetConVarBool(cvarEnabled)) Enabled = true;
-    //else Enabled = false;
+    bEnabled = GetConVarBool(g_cvEnabled);
 }
 
-public OnClientPutInServer(client)
+/*public OnClientPostAdminCheck(client)
 {
     //g_CalCharge[client] = 0;
     //tChargeTimer[client] = CreateTimer(0.5, Timer_ChargeMe, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
-
-    g_SapperModel[client] = -1;
-    
-    for (new i = 0; i < MAX_TARGET_BUILDING; i++)
-    {
-        g_iTargetBuilding[client][i] = -1;
-    }
 }
 
 public OnClientDisconnect(client)
@@ -182,34 +190,37 @@ public OnClientDisconnect(client)
     //g_CalCharge[client] = 0;
     //ClearTimer(tChargeTimer[client]);
 
-    g_SapperModel[client] = -1;
+    // TODO: Destroy existing sappers / remove building targets here
+}*/
 
-    for (new i = 0; i < MAX_TARGET_BUILDING; i++)
-    {
-        g_iTargetBuilding[client][i] = -1;
-    }
-}
-
-public OnEntityDestroyed(entity)
+public OnEntityDestroyed(ent)
 {
-    for (new client = 1; client <= MaxClients; client++)
-    {
-        new slot = GetOccupiedBuildingSlot(client, entity);
+    if (!IsValidEntity(ent) || ent <= 0) return;
 
-        if (slot != -1) //If the entity destroyed was targeted by someone's sapper
+    decl String:sClassname[64];
+    GetEntityClassname(ent, sClassname, sizeof(sClassname));
+
+    for (new i = 0; i < sizeof(g_szBuildingClasses); i++)
+    {
+        if (StrEqual(sClassname, g_szBuildingClasses[i], false))
         {
-            StopSound(g_iTargetBuilding[client][slot], 0, SOUND_SAPPER_NOISE);
-            StopSound(g_iTargetBuilding[client][slot], 0, SOUND_SAPPER_NOISE2);
-            StopSound(g_iTargetBuilding[client][slot], 0, SOUND_SAPPER_PLANT);
-            
-            g_iTargetBuilding[client][slot] = -1; //Then their target is invalid
+            new entref = EntIndexToEntRef(ent);
+            new iIndex = FindValueInArray(g_hTargetedArray, entref);
+            if (iIndex != -1)                                           // If the building was being sapped,
+            {                                                           // remove it from the array because it's destroyed
+                RemoveFromArray(g_hTargetedArray, iIndex);              // and thus can't be sapped anymore
+                StopSound(ent, 0, SOUND_SAPPER_NOISE);
+                StopSound(ent, 0, SOUND_SAPPER_NOISE2);                 // So, if the entity destroyed was targeted by someone's sapper
+                StopSound(ent, 0, SOUND_SAPPER_PLANT);                  // Turn off the sounds on that entity
+                // EmitSoundToClient(i, HHHTheme, _, _, _, SND_STOPLOOPING);
+            }
         }
     }
 }
 
 /*public Action:Timer_ChargeMe(Handle:timer, any:client)
 {
-    if (!Enabled || !IsValidClient(client) || !IsPlayerAlive(client)) return; 
+    if (!bEnabled || !IsValidClient(client) || !IsPlayerAlive(client)) return; 
 
     if (TF2_GetPlayerClass(client) == TFClass_Spy && IsValidEntity(GetPlayerWeaponSlot(client, TFWeaponSlot_Secondary))) //If they are a spy, and have a sapper still
     {
@@ -232,36 +243,32 @@ public OnEntityDestroyed(entity)
 
 public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:angles[3], &weapon)
 {
-    if (!Enabled || !IsValidClient(client) || !IsPlayerAlive(client)) return Plugin_Continue;
+    if (!bEnabled || !IsValidClient(client) || !IsPlayerAlive(client)) return Plugin_Continue;
 
     if (TF2_GetPlayerClass(client) == TFClass_Spy && buttons & (IN_ATTACK3 | IN_RELOAD))
     {
-        new wep = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
-        if (!IsValidEntity(wep)) return Plugin_Continue;
+        new bool:bCloaked = TF2_IsPlayerInCondition(client, TFCond_Cloaked) ? true : GetEntProp(client, Prop_Send, "m_bFeignDeathReady") ? true : false;
 
-        new String:cls[64];
-        GetEntityClassname(wep, cls, sizeof(cls));
-
-        if (StrEqual(cls, "tf_weapon_builder") || StrEqual(cls, "tf_weapon_sapper"))
+        if (!bCloaked && IsWeaponSlotActive(client, TFWeaponSlot_Secondary))
         {
-            new bool:bCloaked = TF2_IsPlayerInCondition(client, TFCond_Cloaked) ? true : GetEntProp(client, Prop_Send, "m_bFeignDeathReady") ? true : false;
-
-            if (!(bCloaked || g_SapperModel[client] != -1)) //If cannot throw //|| g_CalCharge[client] != 100
+            if (!ThrownSapperExists(client)) //If not cloaked and you don't already have a sapper thrown //|| g_CalCharge[client] != 100
             {
                 //EmitSoundToClient(client, SOUND_SAPPER_DENY);
 
-                new index = GetEntProp(wep, Prop_Send, "m_iItemDefinitionIndex");
+                new index = GetIndexOfWeaponSlot(client, TFWeaponSlot_Secondary);
                 //g_CalCharge[client] = 0;
 
                 ThrowSapper(client, index);
 
-                if (TF2_IsPlayerInCondition(client, TFCond_Disguised)) TF2_RemoveCondition(client, TFCond_Disguised);
+                if (TF2_IsPlayerInCondition(client, TFCond_Disguised))
+                {
+                    TF2_RemoveCondition(client, TFCond_Disguised);
+                }
 
                 if (IsClientChdata(client)) return Plugin_Continue;
                 
                 TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
-                new switchto = GetPlayerWeaponSlot(client, TFWeaponSlot_Melee);
-                SetEntPropEnt(client, Prop_Send, "m_hActiveWeapon", switchto);
+                SwitchToOtherWeapon(client);
             }
         }
     }
@@ -269,24 +276,86 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
     return Plugin_Continue;
 }
 
-stock ThrowSapper(any:client, index)
+stock IsWeaponSlotActive(iClient, iSlot)
+{
+    new hActive = GetEntPropEnt(iClient, Prop_Send, "m_hActiveWeapon");
+    new hWeapon = GetPlayerWeaponSlot(iClient, iSlot);
+    return (hWeapon == hActive);
+}
+
+stock GetIndexOfWeaponSlot(client, slot)
+{
+    new weapon = GetPlayerWeaponSlot(client, slot);
+
+    return (weapon > MaxClients && IsValidEntity(weapon) ? GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex"):-1);
+}
+
+stock SwitchToOtherWeapon(client)
+{
+    new ammo = GetAmmo(client, 0);
+    new weapon = GetPlayerWeaponSlot(client, TFWeaponSlot_Primary);
+    new clip = (IsValidEntity(weapon) ? GetEntProp(weapon, Prop_Send, "m_iClip1"):-1);
+
+    if (!(ammo == 0 && clip <= 0))
+    {
+        SetEntPropEnt(client, Prop_Send, "m_hActiveWeapon", weapon);
+    }
+    else
+    {
+        SetEntPropEnt(client, Prop_Send, "m_hActiveWeapon", GetPlayerWeaponSlot(client, TFWeaponSlot_Melee));
+    }
+}
+
+stock GetAmmo(client, slot)
+{
+    if (!IsValidClient(client)) return -1;
+
+    new weapon = GetPlayerWeaponSlot(client, slot);
+
+    if (IsValidEntity(weapon))
+    {
+        new iOffset = GetEntProp(weapon, Prop_Send, "m_iPrimaryAmmoType", 1); // * 4;
+        //new iAmmoTable = FindSendPropInfo("CTFPlayer", "m_iAmmo");
+
+        //return GetEntData(client, iAmmoTable + iOffset);
+
+        if (iOffset < 0)
+        {
+            return -1;
+        }
+
+        return GetEntProp(client, Prop_Send, "m_iAmmo", _, iOffset);
+    }
+
+    return -1;
+}
+
+stock ThrowSapper(client, index)
 {
     new sapper = CreateEntityByName("prop_physics_override");
     if (IsValidEntity(sapper))
     {
         SetEntPropEnt(sapper, Prop_Data, "m_hOwnerEntity", client);
-        SetEntityModel(sapper, (index == 810 || index == 831) ? MDL_THROW_RECORDER : (index == 933) ? MDL_THROW_WHEATLEY : (index == 1080) ? MDL_THROW_FESTIVE : MDL_THROW_SAPPER);
+
+        SetEntityModel(sapper,
+            (index == 810 || index == 831) ? MDL_RECORDER :
+            (index == 1080) ? MDL_FESTIVE :
+            (index == 1102) ? MDL_BREAD :
+            (index ==  933) ? MDL_WHEATLEY :
+            MDL_SAPPER
+        );
+        
         SetEntityMoveType(sapper, MOVETYPE_VPHYSICS);
         SetEntProp(sapper, Prop_Data, "m_CollisionGroup", 1);
         SetEntPropFloat(sapper, Prop_Data, "m_flFriction", 10000.0);
         SetEntPropFloat(sapper, Prop_Data, "m_massScale", 100.0);
-        DispatchKeyValue(sapper, "targetname", "tf2sapper%data");
+        DispatchKeyValue(sapper, "targetname", TARGETNAME_THROWSAP);
         DispatchSpawn(sapper);
-        new Float:pos[3];
-        new Float:ang[3];
-        new Float:vec[3];
-        new Float:svec[3];
-        new Float:pvec[3];
+        decl Float:pos[3];
+        decl Float:ang[3];
+        decl Float:vec[3];
+        decl Float:svec[3];
+        decl Float:pvec[3];
         
         GetClientEyePosition(client, pos);
         GetClientEyeAngles(client, ang);
@@ -305,24 +374,33 @@ stock ThrowSapper(any:client, index)
 
         EmitSoundToAll(SOUND_BOOT, sapper, _, _, SND_CHANGEPITCH, 0.2, 30);
         EmitSoundToAll(SOUND_SAPPER_THROW, client, _, _, _, 1.0);
-        
-        g_SapperModel[client] = sapper;
+
+        decl arr[2];
+        arr[0] = GetClientUserId(client);
+        arr[1] = EntIndexToEntRef(sapper);
+        PushArrayArray(g_hSapperArray, arr);
 
         //SDKHook(sapper, SDKHook_StartTouch, OnStartTouch);
         
-        CreateTimer(5.1, StopSapping, client, TIMER_FLAG_NO_MAPCHANGE);
-        tTimerLoop[client] = CreateTimer(0.1, LoopSapping, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+        CreateTimer(5.1, StopSapping, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
+        tTimerLoop[client] = CreateTimer(0.1, LoopSapping, GetClientUserId(client), TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     }
 }
 
-public Action:LoopSapping(Handle:timer, any:client)
+/*
+ This timer controls finding and sapping nearby buildings, every 0.1s
+
+*/
+public Action:LoopSapping(Handle:timer, any:userid)
 {
-    if (IsValidClient(client) && IsValidEntity(g_SapperModel[client]) && IsPlayerAlive(client))
+    new client = GetClientOfUserId(userid);
+    if (IsValidClient(client) && ThrownSapperExists(client) && IsPlayerAlive(client))
     {
-        AttachRings(g_SapperModel[client]);
+        new sapper = GetClientSapper(client);
+        AttachRings(sapper);
 
         new Float:vSapperPos[3];
-        GetEntPropVector(g_SapperModel[client], Prop_Data, "m_vecAbsOrigin", vSapperPos);
+        GetEntPropVector(sapper, Prop_Data, "m_vecAbsOrigin", vSapperPos);
 
         //Find and sap buildings in relation to this sapper
         FindAllBuildings(client, "obj_dispenser", vSapperPos);
@@ -332,7 +410,7 @@ public Action:LoopSapping(Handle:timer, any:client)
         //If the player who threw it is in range, sap their cloak
         new Float:vPlayerPos[3];
         GetEntPropVector(client, Prop_Data, "m_vecAbsOrigin", vPlayerPos);
-        if (GetVectorDistance(vPlayerPos, vSapperPos) <= GetConVarFloat(cvarSapRadius))
+        if (GetVectorDistance(vPlayerPos, vSapperPos) <= GetConVarFloat(g_cvSapRadius))
         {
             new Float:flCloak = GetEntPropFloat(client, Prop_Send, "m_flCloakMeter");
 
@@ -344,21 +422,30 @@ public Action:LoopSapping(Handle:timer, any:client)
     }
 }
 
-public Action:StopSapping(Handle:timer, any:client)
+/*
+ This timer controls making the sapper stop sapping and destroying the sapper
+
+*/
+public Action:StopSapping(Handle:timer, any:userid)
 {
-    if (!IsValidClient(client) && !IsValidEntity(g_SapperModel[client])) return;
+    new client = GetClientOfUserId(userid);
+    new sapper = GetClientSapper(client);
+    if (!IsValidClient(client) && sapper == -1)
+    {
+        return Plugin_Stop;
+    }
 
     ClearTimer(tTimerLoop[client]);
 
     new String:Name[24];
-    GetEntPropString(g_SapperModel[client], Prop_Data, "m_iName", Name, 128, 0);
+    GetEntPropString(sapper, Prop_Data, "m_iName", Name, 128, 0);
 
-    if (StrEqual(Name, "tf2sapper%data"))
+    if (StrEqual(Name, TARGETNAME_THROWSAP))
     {
-        AcceptEntityInput(g_SapperModel[client], "Kill");
+        AcceptEntityInput(sapper, "Kill");
 
         new Float:SapperPos[3];
-        GetEntPropVector(g_SapperModel[client], Prop_Data, "m_vecAbsOrigin", SapperPos);
+        GetEntPropVector(sapper, Prop_Data, "m_vecAbsOrigin", SapperPos);
 
         ShowParticle(EFFECT_CORE_FLASH, 1.0, SapperPos);
         ShowParticle(EFFECT_DEBRIS, 1.0, SapperPos);
@@ -367,24 +454,31 @@ public Action:StopSapping(Handle:timer, any:client)
         ShowParticle(EFFECT_FLYINGEMBERS, 1.0, SapperPos);
         ShowParticle(EFFECT_SMOKE, 1.0, SapperPos);
 
-        StopSound(g_SapperModel[client], 0, SOUND_BOOT);
-        EmitSoundToAll(SOUND_SAPPER_REMOVED, g_SapperModel[client], _, _, _, 1.0);
-    
-        for (new i = 0; i < MAX_TARGET_BUILDING; i++)
+        StopSound(sapper, 0, SOUND_BOOT);
+        EmitSoundToAll(SOUND_SAPPER_REMOVED, sapper, _, _, _, 1.0);
+
+        new iIndex = -1;
+        while ((iIndex = FindValueInArray(g_hTargetedArray, userid)) != -1)
         {
-            if (IsValidEntity(g_iTargetBuilding[client][i]) && g_iTargetBuilding[client][i] > 0)
+            new building = EntRefToEntIndex(GetArrayCell(g_hTargetedArray, iIndex, 1));
+
+            if (IsValidEntity(building) && building > 0)
             {
-                StopSound(g_iTargetBuilding[client][i], 0, SOUND_SAPPER_NOISE);
-                StopSound(g_iTargetBuilding[client][i], 0, SOUND_SAPPER_NOISE2);
-                StopSound(g_iTargetBuilding[client][i], 0, SOUND_SAPPER_PLANT);
+                StopSound(building, 0, SOUND_SAPPER_NOISE);
+                StopSound(building, 0, SOUND_SAPPER_NOISE2);
+                StopSound(building, 0, SOUND_SAPPER_PLANT);
                 
-                SetEntProp(g_iTargetBuilding[client][i], Prop_Send, "m_bDisabled", 0);
-                g_iTargetBuilding[client][i] = -1;
+                SetEntProp(building, Prop_Send, "m_bDisabled", 0);
             }
+
+            RemoveFromArray(g_hTargetedArray, iIndex);
         }
 
-        g_SapperModel[client] = -1;
+        iIndex = FindValueInArray(g_hSapperArray, userid);
+        RemoveFromArray(g_hSapperArray, iIndex);
     }
+
+    return Plugin_Stop;
 }
 
 //Attaches team colored electrical rings to a sapper. Not tested with other entities.
@@ -398,28 +492,28 @@ stock AttachRings(entity)
     new Float:vSapperPos[3];
     GetEntPropVector(entity, Prop_Data, "m_vecAbsOrigin", vSapperPos);
 
-    new Float:radius = GetConVarFloat(cvarSapRadius);
+    new Float:radius = GetConVarFloat(g_cvSapRadius);
     
     if (GetClientTeam(owner) == TEAM_RED)
     {
-        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_EffectSprite, g_EffectSprite, 1, 1, 0.6, 3.0, 10.0, red, 15, 0);
+        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_hEffectSprite, g_hEffectSprite, 1, 1, 0.6, 3.0, 10.0, red, 15, 0);
         TE_SendToAll();
-        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_EffectSprite, g_EffectSprite, 1, 1, 0.6, 3.0, 10.0, red, 15, 0);
+        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_hEffectSprite, g_hEffectSprite, 1, 1, 0.6, 3.0, 10.0, red, 15, 0);
         TE_SendToAll();
-        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_EffectSprite, g_EffectSprite, 1, 1, 0.6, 3.0, 10.0, red, 15, 0);
+        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_hEffectSprite, g_hEffectSprite, 1, 1, 0.6, 3.0, 10.0, red, 15, 0);
         TE_SendToAll();
-        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_EffectSprite, g_EffectSprite, 1, 1, 0.6, 3.0, 10.0, red, 15, 0);
+        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_hEffectSprite, g_hEffectSprite, 1, 1, 0.6, 3.0, 10.0, red, 15, 0);
         TE_SendToAll();
     }
     else if (GetClientTeam(owner) == TEAM_BLU) //If it's not either team (spectator), don't generate rings
     {
-        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_EffectSprite, g_EffectSprite, 1, 1, 0.6, 3.0, 10.0, blue, 15, 0);
+        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_hEffectSprite, g_hEffectSprite, 1, 1, 0.6, 3.0, 10.0, blue, 15, 0);
         TE_SendToAll();
-        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_EffectSprite, g_EffectSprite, 1, 1, 0.6, 3.0, 10.0, blue, 15, 0);
+        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_hEffectSprite, g_hEffectSprite, 1, 1, 0.6, 3.0, 10.0, blue, 15, 0);
         TE_SendToAll();
-        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_EffectSprite, g_EffectSprite, 1, 1, 0.6, 3.0, 10.0, blue, 15, 0);
+        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_hEffectSprite, g_hEffectSprite, 1, 1, 0.6, 3.0, 10.0, blue, 15, 0);
         TE_SendToAll();
-        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_EffectSprite, g_EffectSprite, 1, 1, 0.6, 3.0, 10.0, blue, 15, 0);
+        TE_SetupBeamRingPoint(vSapperPos, 0.1, radius, g_hEffectSprite, g_hEffectSprite, 1, 1, 0.6, 3.0, 10.0, blue, 15, 0);
         TE_SendToAll();
     }
 }
@@ -438,33 +532,44 @@ stock FindAllBuildings(client, String:clsname[], Float:vPos[3])
         GetEntPropVector(ent, Prop_Data, "m_vecAbsOrigin", vFoundPos);
 
         new team = GetEntProp(ent, Prop_Data, "m_iTeamNum");
-        new slot = GetOccupiedBuildingSlot(client, ent);
 
-        if (GetVectorDistance(vPos, vFoundPos) <= GetConVarFloat(cvarSapRadius) && team != GetClientTeam(client))
+        new iIndex = FindValueInArray(g_hTargetedArray, EntIndexToEntRef(ent));
+
+        new bool:bGodMode = (GetEntProp(ent, Prop_Data, "m_takedamage") == 0);
+
+        if (GetVectorDistance(vPos, vFoundPos) <= GetConVarFloat(g_cvSapRadius) && team != GetClientTeam(client))
         {
-            if (slot != -1) //If we're already targeting it
+            if (iIndex != -1) //If we're already targeting it
             {
-                PerformSap(ent);
+                if (bGodMode)
+                {
+                    RemoveFromArray(g_hTargetedArray, iIndex);
+                }
+                else
+                {
+                    PerformSap(ent);
+                }
             }
-            else  //Register new target if possible
+            else if (!bGodMode)  //Register new target if possible
             {
-                new building = FindEmptyBuildingTarget(client);
+                decl arr[2];
+                arr[0] = GetClientUserId(client);
+                arr[1] = EntIndexToEntRef(ent);
+                iIndex = PushArrayArray(g_hTargetedArray, arr);
 
-                if (building != -1)
+                if (iIndex != -1)
                 {
                     EmitSoundToAll(SOUND_SAPPER_NOISE, ent, _, _, SND_CHANGEPITCH, 1.0, 150);
                     EmitSoundToAll(SOUND_SAPPER_NOISE2, ent, _, _, SND_CHANGEPITCH, 1.0, 60);
                     EmitSoundToAll(SOUND_SAPPER_PLANT, ent, _, _, _, 1.0);
 
                     PerformSap(ent);
-
-                    g_iTargetBuilding[client][building] = ent;  //Set target building
                 }
             }
         }
-        else if (slot != -1)
+        else if (iIndex != -1)
         {
-            g_iTargetBuilding[client][slot] = -1;   //It's not in range/not an enemy so don't target it
+            RemoveFromArray(g_hTargetedArray, iIndex);            // //It's not in range/not an enemy so don't target it
         }
     }
 }
@@ -479,13 +584,14 @@ stock PerformSap(entity)
     new Float:vEffectPos[3];
     vEffectPos[0] = GetRandomFloat(-25.0, 25.0);
     vEffectPos[1] = GetRandomFloat(-25.0, 25.0);
-    vEffectPos[2] = GetRandomFloat(10.0, 65.0);
+    vEffectPos[2] = GetRandomFloat(10.0, (GetEntProp(entity, Prop_Send, "m_iObjectType") == 1) ? 25.0 : 65.0);
     
     ShowParticleEntity(entity, EFFECT_SENTRY_FX, 0.5, vEffectPos);
     ShowParticleEntity(entity, EFFECT_SENTRY_SPARKS1, 0.5, vEffectPos);
     ShowParticleEntity(entity, EFFECT_SENTRY_SPARKS2, 0.5, vEffectPos);
 }
 
+/*
 stock FindEmptyBuildingTarget(client)
 {
     new building = 0; //This loop jumps to the next empty building slot
@@ -509,6 +615,50 @@ stock GetOccupiedBuildingSlot(client, entity)
         }
     }
     return -1; //Not found
+}
+*/
+
+/*
+ return true if player has a sapper thrown and in the world
+ return false otherwise
+
+ also validates its existence and removes the sapper if it doesn't exist
+
+*/
+stock bool:ThrownSapperExists(client)
+{
+    new userid = GetClientUserId(client);
+    new iIndex = FindValueInArray(g_hSapperArray, userid);
+
+    if (iIndex != -1)
+    {
+        return bool:IsValidEntity(EntRefToEntIndex(GetArrayCell(g_hSapperArray, iIndex, 1)));
+    }
+    return false;
+
+    /*
+    RemoveFromArray(g_hSapperArray, iIndex);
+    
+    */
+
+    // return bool:(iIndex != -1);
+}
+
+/*
+ TODO: GetClientSappers in an array
+
+*/
+stock GetClientSapper(client)
+{
+    new userid = GetClientUserId(client);
+    new iIndex = FindValueInArray(g_hSapperArray, userid);
+
+    if (iIndex != -1)
+    {
+        new ent = EntRefToEntIndex(GetArrayCell(g_hSapperArray, iIndex, 1));
+        return (IsValidEntity(ent)&&ent>0)?ent:-1;
+    }
+    return false;
 }
 
 #define MAX_STEAMAUTH_LENGTH 21
@@ -624,7 +774,7 @@ stock ClearTimer(&Handle:timer)
 
 stock bool:IsValidClient(i, bool:replay = true)
 {
-    if (i <= 0 || i > MaxClients || !IsClientInGame(i) || GetEntProp(i, Prop_Send, "m_bIsCoaching")) return false;
+    if (0 > i || i > MaxClients || !IsClientInGame(i) || GetEntProp(i, Prop_Send, "m_bIsCoaching")) return false;
     if (replay && (IsClientSourceTV(i) || IsClientReplay(i))) return false;
     return true;
 }
@@ -644,7 +794,7 @@ public OnEntityCreated(entity, const String:classname[])
     {
         new String:Name[24];
         GetEntPropString(entity, Prop_Data, "m_iName", Name, 128, 0);
-        if (StrEqual(Name, "tf2sapper%data"))
+        if (StrEqual(Name, TARGETNAME_THROWSAP))
         {
             SDKHook(entity, SDKHook_StartTouch, OnStartTouch);
         }
