@@ -17,7 +17,7 @@ Also credits to the maker of the RMF ability pack, from which playpoints was pro
 #include <tf2>
 #include <tf2_stocks>
 
-#define PLUGIN_VERSION "0x05"
+#define PLUGIN_VERSION "0x06"
 
 #define TARGETNAME_THROWSAP       "tf2sapper%data"
 //#define MDL_SAPPER      "models/weapons/c_models/c_sapper/c_sapper.mdl" //Sadly, this conflicts with some custom skins or something
@@ -52,9 +52,6 @@ static const String:g_szBuildingClasses[][] = {
     "obj_teleporter"
 };
 
-//31 players x 4 buildings = 124
-#define MAX_TARGETABLE_BUILDINGS 124
-
 //#define TEAM_SPEC 0
 #define TEAM_RED    2
 #define TEAM_BLU    3
@@ -85,11 +82,7 @@ static Handle:g_hSapperArray;                                           // Holds
 static Handle:g_hTargetedArray;                                         // Holds entrefs for buildings targeted by sappers.
                                                                         // Both have 2 blocks. [owner userid][entref]
 
-// TODO: We need target array to track the player/sapper sapping them, not their owner
-
 //new g_CalCharge[MAXPLAYERS + 1];                                      // Holds the charge amount for being able to throw a sapper.
-//new g_SapperModel[MAXPLAYERS + 1];                                      // Holds the entity index of spawned sappers.
-//new g_iTargetBuilding[MAXPLAYERS + 1][MAX_TARGET_BUILDING];             // Holds the entity index of buildings targetted by a sapper.
 
 new Handle:g_cvEnabled = INVALID_HANDLE;
 new Handle:g_cvSapRadius = INVALID_HANDLE;
@@ -113,7 +106,7 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
     GetGameFolderName(Game, sizeof(Game));
     if (!StrEqual(Game, "tf"))
     {
-        Format(error, err_max, "[throwsap] This plugin only works for Team Fortress 2");
+        Format(error, err_max, "[Throwsap] This plugin only works for Team Fortress 2");
         return APLRes_Failure;
     }
     return APLRes_Success;
@@ -132,7 +125,7 @@ public OnPluginStart()
     g_hSapperArray = CreateArray(2);   // Each index has 2 blocks
     g_hTargetedArray = CreateArray(2);
     
-    for (new client = 1; client <= MaxClients; client++)
+    /*for (new client = 1; client <= MaxClients; client++)
     {   
         if (IsClientInGame(client))
         {
@@ -141,7 +134,7 @@ public OnPluginStart()
             //g_CalCharge[client] = 0;
             //tChargeTimer[client] = CreateTimer(0.5, Timer_ChargeMe, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
         }
-    }
+    }*/
 }
 
 public OnMapStart()
@@ -183,15 +176,51 @@ public OnConfigsExecuted()
 {
     //g_CalCharge[client] = 0;
     //tChargeTimer[client] = CreateTimer(0.5, Timer_ChargeMe, client, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
-}
+}*/
 
 public OnClientDisconnect(client)
 {
     //g_CalCharge[client] = 0;
     //ClearTimer(tChargeTimer[client]);
 
-    // TODO: Destroy existing sappers / remove building targets here
-}*/
+    DestroySapper(GetClientUserId(client), GetClientSapper(client));
+
+    /*new iIndex = -1;
+    while ((iIndex = FindValueInArray(g_hTargetedArray, userid)) != -1)
+    {
+        new building = EntRefToEntIndex(GetArrayCell(g_hTargetedArray, iIndex, 1));
+
+        if (IsValidEntity(building) && building > 0)
+        {
+            StopSound(building, 0, SOUND_SAPPER_NOISE);
+            StopSound(building, 0, SOUND_SAPPER_NOISE2);
+            StopSound(building, 0, SOUND_SAPPER_PLANT);
+            
+            SetEntProp(building, Prop_Send, "m_bDisabled", 0);
+        }
+
+        RemoveFromArray(g_hTargetedArray, iIndex);
+    }
+
+    iIndex = -1;
+    while ((iIndex = FindValueInArray(g_hSapperArray, userid)) != -1)
+    {
+        new sapper = EntRefToEntIndex(GetArrayCell(g_hSapperArray, iIndex, 1));
+
+        if (IsValidEntity(sapper) && sapper > 0)
+        {
+            StopSound(sapper, 0, SOUND_SAPPER_NOISE);
+            StopSound(sapper, 0, SOUND_SAPPER_NOISE2);
+            StopSound(sapper, 0, SOUND_SAPPER_PLANT);
+            
+            SetEntProp(sapper, Prop_Send, "m_bDisabled", 0);
+        }
+
+        RemoveFromArray(g_hSapperArray, iIndex);
+    }*/
+
+    // TODO: Destroy existing sappers
+}
 
 public OnEntityDestroyed(ent)
 {
@@ -432,12 +461,19 @@ public Action:StopSapping(Handle:timer, any:userid)
     new sapper = GetClientSapper(client);
     if (!IsValidClient(client) && sapper == -1)
     {
-        return Plugin_Stop;
+        return Plugin_Stop; // TODO: Figure out why this check exists
     }
 
     ClearTimer(tTimerLoop[client]);
 
-    new String:Name[24];
+    DestroySapper(userid, sapper);
+
+    return Plugin_Stop;
+}
+
+DestroySapper(userid, sapper)
+{
+    decl String:Name[24];
     GetEntPropString(sapper, Prop_Data, "m_iName", Name, 128, 0);
 
     if (StrEqual(Name, TARGETNAME_THROWSAP))
@@ -477,8 +513,6 @@ public Action:StopSapping(Handle:timer, any:userid)
         iIndex = FindValueInArray(g_hSapperArray, userid);
         RemoveFromArray(g_hSapperArray, iIndex);
     }
-
-    return Plugin_Stop;
 }
 
 //Attaches team colored electrical rings to a sapper. Not tested with other entities.
