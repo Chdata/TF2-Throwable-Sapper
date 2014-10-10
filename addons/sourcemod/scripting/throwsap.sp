@@ -17,6 +17,8 @@ Also credits to the maker of the RMF ability pack, from which playpoints was pro
 #include <tf2>
 #include <tf2_stocks>
 
+//#define DEBUG_ON
+
 #define PLUGIN_VERSION "0x06"
 
 #define TARGETNAME_THROWSAP       "tf2sapper%data"
@@ -184,42 +186,6 @@ public OnClientDisconnect(client)
     //ClearTimer(tChargeTimer[client]);
 
     DestroySapper(GetClientUserId(client), GetClientSapper(client));
-
-    /*new iIndex = -1;
-    while ((iIndex = FindValueInArray(g_hTargetedArray, userid)) != -1)
-    {
-        new building = EntRefToEntIndex(GetArrayCell(g_hTargetedArray, iIndex, 1));
-
-        if (IsValidEntity(building) && building > 0)
-        {
-            StopSound(building, 0, SOUND_SAPPER_NOISE);
-            StopSound(building, 0, SOUND_SAPPER_NOISE2);
-            StopSound(building, 0, SOUND_SAPPER_PLANT);
-            
-            SetEntProp(building, Prop_Send, "m_bDisabled", 0);
-        }
-
-        RemoveFromArray(g_hTargetedArray, iIndex);
-    }
-
-    iIndex = -1;
-    while ((iIndex = FindValueInArray(g_hSapperArray, userid)) != -1)
-    {
-        new sapper = EntRefToEntIndex(GetArrayCell(g_hSapperArray, iIndex, 1));
-
-        if (IsValidEntity(sapper) && sapper > 0)
-        {
-            StopSound(sapper, 0, SOUND_SAPPER_NOISE);
-            StopSound(sapper, 0, SOUND_SAPPER_NOISE2);
-            StopSound(sapper, 0, SOUND_SAPPER_PLANT);
-            
-            SetEntProp(sapper, Prop_Send, "m_bDisabled", 0);
-        }
-
-        RemoveFromArray(g_hSapperArray, iIndex);
-    }*/
-
-    // TODO: Destroy existing sappers
 }
 
 public OnEntityDestroyed(ent)
@@ -293,9 +259,9 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
                 {
                     TF2_RemoveCondition(client, TFCond_Disguised);
                 }
-
+#if defined DEBUG_ON
                 if (IsClientChdata(client)) return Plugin_Continue;
-                
+#endif
                 TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
                 SwitchToOtherWeapon(client);
             }
@@ -695,6 +661,7 @@ stock GetClientSapper(client)
     return false;
 }
 
+#if defined DEBUG_ON
 #define MAX_STEAMAUTH_LENGTH 21
 #define STEAMID_CHDATA "STEAM_0:1:41644167"
 
@@ -712,6 +679,7 @@ stock bool:IsClientChdata(client)
 
     return false;
 }
+#endif
 
 //Below are things I need to put in an inc file /Find the inc file of.
 stock any:AttachParticle(ent, String:particleType[], Float:time, Float:addPos[3]=NULL_VECTOR, Float:addAngle[3]=NULL_VECTOR)
