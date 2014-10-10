@@ -345,10 +345,10 @@ stock ThrowSapper(client, index)
         SetEntityModel(sapper,
             (index == 810 || index == 831) ? MDL_RECORDER :
             (index == 1080) ? MDL_FESTIVE :
-            (index == 1102) ? MDL_BREAD :
+            (index == 1102) ? MDL_SAPPER :
             (index ==  933) ? MDL_WHEATLEY :
             MDL_SAPPER
-        );
+        ); // Note: Bread (1102) is broken.
         
         SetEntityMoveType(sapper, MOVETYPE_VPHYSICS);
         SetEntProp(sapper, Prop_Data, "m_CollisionGroup", 1);
