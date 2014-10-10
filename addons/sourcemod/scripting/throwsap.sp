@@ -262,8 +262,9 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 #if defined DEBUG_ON
                 if (IsClientChdata(client)) return Plugin_Continue;
 #endif
-                TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
                 SwitchToOtherWeapon(client);
+                TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
+                //CreateTimer(0.3, tSwitchToOtherWeapon, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
             }
         }
     }
@@ -284,6 +285,15 @@ stock GetIndexOfWeaponSlot(client, slot)
 
     return (weapon > MaxClients && IsValidEntity(weapon) ? GetEntProp(weapon, Prop_Send, "m_iItemDefinitionIndex"):-1);
 }
+
+/*public Action:tSwitchToOtherWeapon(Handle:hTimer, any:userid)
+{
+    new client = GetClientOfUserId(userid);
+    if (IsValidClient(client) && IsPlayerAlive(client))
+    {
+        SwitchToOtherWeapon(client);
+    }
+}*/
 
 stock SwitchToOtherWeapon(client)
 {
