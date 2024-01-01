@@ -58,6 +58,10 @@ static const String:g_szBuildingClasses[][] = {
 #define TEAM_RED    2
 #define TEAM_BLU    3
 
+#define SAPPER_ENABLED 0
+#define RED_TAPE_ENABLED 1
+#define BOTH_ENABLED 2
+
 /*
 #define SOUND_RECORDER_NOISE "weapons/spy_tape_0" X.wav" X = 1-5
 #define SOUND_WHEATLEY_NOISE "vo/items/wheatley_sapper/wheatley_sapper_hacking" XX.wav" XX = 02-37
@@ -76,7 +80,8 @@ else Format(z, sizeof(z), "0%i", VoiceOffset);
 
 Format(s, PLATFORM_MAX_PATH, "vo/items/wheatley_sapper/wheatley_sapper_hacking%s.wav", z);
 */
-
+new bool:sapperBlocked = false;
+new bool:waitingForPlayers = true;
 new bool:bEnabled;                                                      // Bool for the plugin being enabled or disabled.
 new g_hEffectSprite;                                                    // Handle for the lightning shockwave sprite.
 
@@ -88,6 +93,7 @@ static Handle:g_hTargetedArray;                                         // Holds
 
 new Handle:g_cvEnabled = INVALID_HANDLE;
 new Handle:g_cvSapRadius = INVALID_HANDLE;
+new Handle:g_cvSapType = INVALID_HANDLE;
 
 //new Handle:tChargeTimer[MAXPLAYERS + 1] = INVALID_HANDLE;
 new Handle:tTimerLoop[MAXPLAYERS + 1] = INVALID_HANDLE;
@@ -114,11 +120,37 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
     return APLRes_Success;
 }
 
+public Action Event_EndRound(Event event, const char[] name, bool dontBroadcast)
+{
+	sapperBlocked = true;
+	return Plugin_Continue;
+}
+
+public Action Event_StartRound(Event event, const char[] name, bool dontBroadcast)
+{
+	sapperBlocked = false;
+	return Plugin_Continue;
+}
+
+public void TF2_OnWaitingForPlayersEnd()
+{
+	waitingForPlayers = false;
+}
+
+public void TF2_OnWaitingForPlayersStart()
+{
+	waitingForPlayers = true;
+}
+
 public OnPluginStart()
 {
     CreateConVar("throwsap_version", PLUGIN_VERSION, "Throwsap Version", FCVAR_REPLICATED | FCVAR_PLUGIN | FCVAR_SPONLY | FCVAR_DONTRECORD | FCVAR_NOTIFY);
     g_cvEnabled = CreateConVar("throwsap_enabled", "1", "Enable/Disable throwsap plugin.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
     g_cvSapRadius = CreateConVar("throwsap_sapradius", "300.0", "Radius of effect.");
+	g_cvSapType = CreateConVar("sap_type", "1", "Sapper type to become throwable");
+	HookEvent("teamplay_round_win", Event_EndRound);
+	HookEvent("teamplay_round_stalemate", Event_EndRound);
+	HookEvent("teamplay_round_active", Event_StartRound);
 
     AutoExecConfig(true, "plugin.throwsap");
 
@@ -240,21 +272,23 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 {
     if (!bEnabled || !IsValidClient(client) || !IsPlayerAlive(client)) return Plugin_Continue;
 
-    if (TF2_GetPlayerClass(client) == TFClass_Spy && buttons & (IN_ATTACK3 | IN_RELOAD))
+    if (TF2_GetPlayerClass(client) == TFClass_Spy && buttons & (IN_RELOAD))
     {
+		if (sapperBlocked == true || waitingForPlayers == true) return Plugin_Continue;
         new bool:bCloaked = TF2_IsPlayerInCondition(client, TFCond_Cloaked) ? true : GetEntProp(client, Prop_Send, "m_bFeignDeathReady") ? true : false;
 
         if (!bCloaked && IsWeaponSlotActive(client, TFWeaponSlot_Secondary))
         {
+		int iItemDefinitionIndex = GetPlayerWeaponSlot(client, 1);
+		int checkSap = GetEntProp(iItemDefinitionIndex, Prop_Send, "m_iItemDefinitionIndex");
+		if (checkSap == 810 && GetConVarInt(g_cvSapType) == RED_TAPE_ENABLED || checkSap != 810 && GetConVarInt(g_cvSapType) == SAPPER_ENABLED || GetConVarInt(g_cvSapType) == BOTH_ENABLED) {
             if (!ThrownSapperExists(client)) //If not cloaked and you don't already have a sapper thrown //|| g_CalCharge[client] != 100
             {
                 //EmitSoundToClient(client, SOUND_SAPPER_DENY);
 
                 new index = GetIndexOfWeaponSlot(client, TFWeaponSlot_Secondary);
                 //g_CalCharge[client] = 0;
-
                 ThrowSapper(client, index);
-
                 if (TF2_IsPlayerInCondition(client, TFCond_Disguised))
                 {
                     TF2_RemoveCondition(client, TFCond_Disguised);
@@ -266,7 +300,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
                 TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
                 //CreateTimer(0.3, tSwitchToOtherWeapon, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
             }
-        }
+        }}
     }
 
     return Plugin_Continue;
