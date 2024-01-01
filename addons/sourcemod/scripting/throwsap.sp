@@ -94,7 +94,9 @@ static Handle:g_hTargetedArray;                                         // Holds
 new Handle:g_cvEnabled = INVALID_HANDLE;
 new Handle:g_cvSapRadius = INVALID_HANDLE;
 new Handle:g_cvSapType = INVALID_HANDLE;
-
+new Handle:g_cvSapNum = INVALID_HANDLE;
+new Handle:g_cvKeepDisguise = INVALID_HANDLE;
+new Handle:g_cvDamage = INVALID_HANDLE;
 //new Handle:tChargeTimer[MAXPLAYERS + 1] = INVALID_HANDLE;
 new Handle:tTimerLoop[MAXPLAYERS + 1] = INVALID_HANDLE;
 //new Handle:hHudCharge = INVALID_HANDLE;
@@ -148,6 +150,9 @@ public OnPluginStart()
     g_cvEnabled = CreateConVar("throwsap_enabled", "1", "Enable/Disable throwsap plugin.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
     g_cvSapRadius = CreateConVar("throwsap_sapradius", "300.0", "Radius of effect.");
 	g_cvSapType = CreateConVar("sap_type", "1", "Sapper type to become throwable");
+	g_cvSapNum = CreateConVar("sap_count", "1", "Amount of sappers you can throw");
+	g_cvKeepDisguise = CreateConVar("throwsap_keep_disguise", "0", "Whether throwing a sapper keeps your disguise or not");
+	g_cvDamage = CreateConVar("throwsap_damage", "2", "Whether throwing a sapper keeps your disguise or not");
 	HookEvent("teamplay_round_win", Event_EndRound);
 	HookEvent("teamplay_round_stalemate", Event_EndRound);
 	HookEvent("teamplay_round_active", Event_StartRound);
@@ -289,7 +294,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
                 new index = GetIndexOfWeaponSlot(client, TFWeaponSlot_Secondary);
                 //g_CalCharge[client] = 0;
                 ThrowSapper(client, index);
-                if (TF2_IsPlayerInCondition(client, TFCond_Disguised))
+                if (TF2_IsPlayerInCondition(client, TFCond_Disguised) && GetConVarInt(g_cvKeepDisguise) != 1)
                 {
                     TF2_RemoveCondition(client, TFCond_Disguised);
                 }
@@ -297,7 +302,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
                 if (IsClientChdata(client)) return Plugin_Continue;
 #endif
                 SwitchToOtherWeapon(client);
-                TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
+				if (GetConVarInt(g_cvSapNum) > 0) TF2_RemoveWeaponSlot(client, TFWeaponSlot_Secondary);
                 //CreateTimer(0.3, tSwitchToOtherWeapon, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
             }
         }}
@@ -620,7 +625,7 @@ stock FindAllBuildings(client, String:clsname[], Float:vPos[3])
 
 stock PerformSap(entity)
 {
-    SetVariantInt(2);
+    SetVariantInt(GetConVarInt(g_cvDamage)); 
     AcceptEntityInput(entity, "RemoveHealth");
 
     SetEntProp(entity, Prop_Send, "m_bDisabled", 1);
